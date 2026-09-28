@@ -68,7 +68,7 @@ func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 	case "gauge":
 		val, err := strconv.ParseFloat(valueMetric, 64)
 		if err != nil {
-			fmt.Println("Ошибка преобразования:", err)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		a.storage.gauge[nameMetric] = val
@@ -78,7 +78,7 @@ func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 	case "counter":
 		val, err := strconv.ParseInt(valueMetric, 10, 64)
 		if err != nil {
-			fmt.Println("Ошибка преобразования:", err)
+			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		a.storage.counter[nameMetric] += val
@@ -88,6 +88,4 @@ func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusNotFound)
 	}
-	fmt.Printf("Path: %q\n", r.URL.Path)
-	w.WriteHeader(http.StatusOK)
 }
