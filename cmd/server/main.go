@@ -86,6 +86,6 @@ func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println(a.storage)
 		return
 	default:
-		w.WriteHeader(http.StatusNotFound)
+		w.WriteHeader(http.StatusBadRequest)
 	}
 }
