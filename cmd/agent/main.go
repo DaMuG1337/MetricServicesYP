@@ -18,6 +18,7 @@ func main() {
 		gauge:   map[string]float64{},
 		counter: map[string]int64{},
 	}
+
 	var met runtime.MemStats
 	pollInterval := 2
 	reportInterval := 10
@@ -67,7 +68,6 @@ func addMetric(met runtime.MemStats, m *Metrics) {
 	m.gauge["StackSys"] = float64(met.StackSys)
 	m.gauge["Sys"] = float64(met.Sys)
 	m.gauge["TotalAlloc"] = float64(met.TotalAlloc)
-	fmt.Println(m)
 }
 
 func rangeMetrics(m *Metrics) {
