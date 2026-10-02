@@ -46,7 +46,6 @@ func run() error {
 }
 
 func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
-
 	if r.Method != MethodPost {
 		http.Error(w, "Щас пока только POST", http.StatusMethodNotAllowed)
 		return
