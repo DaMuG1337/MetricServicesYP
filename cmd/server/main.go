@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
+
+	"github.com/go-chi/chi/v5"
 )
 
 const (
@@ -40,29 +41,18 @@ func run() error {
 		counter: map[string]int64{},
 	},
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", app.checkHandler)
-	return http.ListenAndServe(":8080", mux)
+	r := chi.NewRouter()
+	r.Post("/update/{type}/{name}/{value}", app.postMetrics)
+	r.Get("/value/{type}/{name}", app.getMetrics)
+	r.Get("/", app.getAllMetrics)
+	return http.ListenAndServe(":8080", r)
 }
 
-func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method != MethodPost {
-		http.Error(w, "Щас пока только POST", http.StatusMethodNotAllowed)
-		return
-	}
-	partsMetric := strings.Split(r.URL.Path, "/")
-	if len(partsMetric) != 5 || partsMetric[0] != "" || partsMetric[1] != "update" {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	typeMetric := partsMetric[2]
-	nameMetric := partsMetric[3]
-	valueMetric := partsMetric[4]
+func (a *App) postMetrics(w http.ResponseWriter, r *http.Request) {
+	typeMetric := chi.URLParam(r, "type")
+	nameMetric := chi.URLParam(r, "name")
+	valueMetric := chi.URLParam(r, "value")
 
-	if nameMetric == "" {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
 	switch typeMetric {
 	case "gauge":
 		val, err := strconv.ParseFloat(valueMetric, 64)
@@ -87,4 +77,38 @@ func (a *App) checkHandler(w http.ResponseWriter, r *http.Request) {
 	default:
 		w.WriteHeader(http.StatusBadRequest)
 	}
+}
+
+func (a *App) getMetrics(w http.ResponseWriter, r *http.Request) {
+	typeMetric := chi.URLParam(r, "type")
+	nameMetric := chi.URLParam(r, "name")
+
+	switch typeMetric {
+	case "gauge":
+		val, ok := a.storage.gauge[nameMetric]
+		if !ok {
+			http.Error(w, "Метрика по имени не найдена", http.StatusNotFound)
+		}
+		fmt.Fprintf(w, "%v", val)
+
+	case "counter":
+		val, ok := a.storage.counter[nameMetric]
+		if !ok {
+			http.Error(w, "Метрика по имени не найдена", http.StatusNotFound)
+		}
+		fmt.Fprintf(w, "%v", val)
+	}
+}
+
+func (a *App) getAllMetrics(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte("<html><body>"))
+	w.Write([]byte("<h1>Метрики</h1>"))
+	for name, value := range a.storage.gauge {
+		w.Write([]byte(fmt.Sprintf("<p>%s : %v</p>", name, value)))
+	}
+	for name, value := range a.storage.counter {
+		w.Write([]byte(fmt.Sprintf("<p>%s : %v</p>", name, value)))
+	}
+	w.Write([]byte("</body></html>"))
 }
