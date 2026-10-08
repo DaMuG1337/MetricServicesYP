@@ -18,10 +18,11 @@ func main() {
 		gauge:   map[string]float64{},
 		counter: map[string]int64{},
 	}
+	parseFlags()
 
 	var met runtime.MemStats
-	pollInterval := 2
-	reportInterval := 10
+	pollInterval := flagPollInterval
+	reportInterval := flagReportInterval
 	pollCount := 0
 
 	for {
@@ -80,7 +81,7 @@ func rangeMetrics(m *Metrics) {
 }
 
 func makeURLRequest(typeMetric, name string, value interface{}) error {
-	s := fmt.Sprintf("http://localhost:8080/update/%s/%s/%v", typeMetric, name, value)
+	s := fmt.Sprintf("http://localhost%s/update/%s/%s/%v", flagRunAddr, typeMetric, name, value)
 	response, err := http.Post(s, "text/plain", nil)
 	if err != nil {
 		fmt.Println("Ошибка:", err)

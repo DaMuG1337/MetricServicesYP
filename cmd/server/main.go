@@ -30,6 +30,7 @@ type App struct {
 }
 
 func main() {
+	parseFlags()
 	if err := run(); err != nil {
 		panic(err)
 	}
@@ -45,7 +46,7 @@ func run() error {
 	r.Post("/update/{type}/{name}/{value}", app.postMetrics)
 	r.Get("/value/{type}/{name}", app.getMetrics)
 	r.Get("/", app.getAllMetrics)
-	return http.ListenAndServe(":8080", r)
+	return http.ListenAndServe(flagRunAddr, r)
 }
 
 func (a *App) postMetrics(w http.ResponseWriter, r *http.Request) {
