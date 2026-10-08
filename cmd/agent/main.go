@@ -81,7 +81,7 @@ func rangeMetrics(m *Metrics) {
 }
 
 func makeURLRequest(typeMetric, name string, value interface{}) error {
-	s := fmt.Sprintf("http://localhost%s/update/%s/%s/%v", flagRunAddr, typeMetric, name, value)
+	s := fmt.Sprintf("http://%s/update/%s/%s/%v", flagRunAddr, typeMetric, name, value)
 	response, err := http.Post(s, "text/plain", nil)
 	if err != nil {
 		fmt.Println("Ошибка:", err)
