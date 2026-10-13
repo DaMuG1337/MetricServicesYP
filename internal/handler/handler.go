@@ -1,0 +1,93 @@
+package handler
+
+import (
+	"fmt"
+	"log"
+	"net/http"
+	"strconv"
+
+	"github.com/DaMuG1337/MetricServices/internal/storage"
+	"github.com/go-chi/chi/v5"
+)
+
+type App struct {
+	storage storage.Storage
+}
+
+func NewApp(storage storage.Storage) *App {
+	return &App{storage: storage}
+}
+
+func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
+	typeMetric := chi.URLParam(r, "type")
+	nameMetric := chi.URLParam(r, "name")
+	if nameMetric == "" {
+		w.WriteHeader(http.StatusNotFound)
+	}
+	valueMetric := chi.URLParam(r, "value")
+
+	switch typeMetric {
+	case "gauge":
+		val, err := strconv.ParseFloat(valueMetric, 64)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		a.storage.SetGauge(nameMetric, val)
+		w.WriteHeader(http.StatusOK)
+		log.Println(a.storage)
+		return
+	case "counter":
+		val, err := strconv.ParseInt(valueMetric, 10, 64)
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		a.storage.AddCounter(nameMetric, val)
+		w.WriteHeader(http.StatusOK)
+		log.Println(a.storage)
+		return
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+	}
+}
+
+func (a *App) GetMetrics(w http.ResponseWriter, r *http.Request) {
+	typeMetric := chi.URLParam(r, "type")
+	nameMetric := chi.URLParam(r, "name")
+
+	switch typeMetric {
+	case "gauge":
+		val, ok := a.storage.GetGauge(nameMetric)
+		if !ok {
+			http.Error(w, "Метрика по имени не найдена", http.StatusNotFound)
+			return
+		}
+		fmt.Fprintf(w, "%v", val)
+
+	case "counter":
+		val, ok := a.storage.GetCounter(nameMetric)
+		if !ok {
+			http.Error(w, "Метрика по имени не найдена", http.StatusNotFound)
+			return
+		}
+		fmt.Fprintf(w, "%v", val)
+	}
+}
+
+func (a *App) GetAllMetrics(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte("<html><body>"))
+	w.Write([]byte("<h1>Метрики</h1>"))
+	gauges := a.storage.GetAllGauges()
+	counters := a.storage.GetAllCounters()
+	w.Write([]byte("<h2>Gauge</h2>"))
+	for name, value := range gauges {
+		w.Write([]byte(fmt.Sprintf("<p>%s : %v</p>", name, value)))
+	}
+	w.Write([]byte("<h2>Counter</h2>"))
+	for name, value := range counters {
+		w.Write([]byte(fmt.Sprintf("<p>%s : %v</p>", name, value)))
+	}
+	w.Write([]byte("</body></html>"))
+}

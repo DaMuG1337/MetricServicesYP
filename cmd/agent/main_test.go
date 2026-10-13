@@ -140,6 +140,7 @@ func Test_addMetric(t *testing.T) {
 			delete(tt.m.gauge, "RandomValue")
 			if !reflect.DeepEqual(tt.m, tt.wantMetrics) {
 				t.Errorf("Ожидалось: %v, получено: %v", tt.wantMetrics, tt.m)
+				return
 			}
 		})
 	}

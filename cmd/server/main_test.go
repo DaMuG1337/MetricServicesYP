@@ -5,17 +5,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/DaMuG1337/MetricServices/internal/handler"
+	"github.com/DaMuG1337/MetricServices/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
 func TestApp_postMetrics(t *testing.T) {
-	app := &App{storage: &MemStorage{
-		gauge:   map[string]float64{},
-		counter: map[string]int64{},
-	},
-	}
-	r := chi.NewRouter()
-	r.Post("/update/{type}/{name}/{value}", app.postMetrics)
 
 	tests := []struct {
 		name     string
@@ -27,32 +22,37 @@ func TestApp_postMetrics(t *testing.T) {
 		{" Test 2: Проверочка counter", http.MethodPost, "/update/counter/testCounter/10", http.StatusOK},
 		{" Test 3: Мисс метод", http.MethodGet, "/update/gauge/testGauge/123.45", http.StatusMethodNotAllowed},
 		{" Test 4: Неверный формат пути", http.MethodPost, "/invalid/path/format", http.StatusNotFound},
-		{" Test 5: Пустое имя метрики", http.MethodPost, "/update/gauge//123.45", http.StatusOK}, // почему оно блять даёт 200, а не 404?????
+		{" Test 5: Пустое имя метрики", http.MethodPost, "/update/gauge//123.45", http.StatusNotFound},
 		{" Test 6: Неверное значение gauge", http.MethodPost, "/update/gauge/testGauge/invalidValue", http.StatusBadRequest},
 		{" Test 7: Неверное значение counter", http.MethodPost, "/update/counter/testCounter/invalidValue", http.StatusBadRequest},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			storage := storage.NewMemStorage()
+			app := handler.NewApp(storage)
+
+			r := chi.NewRouter()
+			r.Post("/update/{type}/{name}/{value}", app.PostMetrics)
+
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			r.ServeHTTP(w, req)
+
 			if w.Code != tt.wantCode {
 				t.Errorf("Не так = %v, Надо бы так %v", w.Code, tt.wantCode)
+				return
 			}
 		})
 	}
 }
 
 func TestApp_getMetrics(t *testing.T) {
-	app := &App{storage: &MemStorage{
-		gauge:   map[string]float64{"Alloc": 123},
-		counter: map[string]int64{"PollCount": 42},
-	},
-	}
+	storage := storage.NewMemStorage()
+	app := handler.NewApp(storage)
 
 	r := chi.NewRouter()
-	r.Get("/value/{type}/{name}", app.getMetrics)
+	r.Get("/value/{type}/{name}", app.GetMetrics)
 
 	tests := []struct {
 		name      string
@@ -73,9 +73,11 @@ func TestApp_getMetrics(t *testing.T) {
 			r.ServeHTTP(w, req)
 			if w.Code != tt.wantCode {
 				t.Errorf("Ожидался статус %d, получен %d", tt.wantCode, w.Code)
+				return
 			}
 			if w.Body.String() != tt.wantValue {
 				t.Errorf("Ожидалось тело %q, получено %q", tt.wantValue, w.Body.String())
+				return
 			}
 		})
 	}
