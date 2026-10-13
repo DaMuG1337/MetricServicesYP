@@ -11,7 +11,6 @@ import (
 )
 
 func TestApp_postMetrics(t *testing.T) {
-
 	tests := []struct {
 		name     string
 		method   string
@@ -48,12 +47,6 @@ func TestApp_postMetrics(t *testing.T) {
 }
 
 func TestApp_getMetrics(t *testing.T) {
-	storage := storage.NewMemStorage()
-	app := handler.NewApp(storage)
-
-	r := chi.NewRouter()
-	r.Get("/value/{type}/{name}", app.GetMetrics)
-
 	tests := []struct {
 		name      string
 		method    string
@@ -64,13 +57,22 @@ func TestApp_getMetrics(t *testing.T) {
 		{"Первая проверка", http.MethodGet, "/value/gauge/Alloc", http.StatusOK, "123"},
 		{"Вторая проверка", http.MethodGet, "/value/counter/PollCount", http.StatusOK, "42"},
 		{"Третья попытка", http.MethodPost, "/value/gauge/Alloc", http.StatusMethodNotAllowed, ""},
-		{"Первая проверка", http.MethodGet, "/value/gauge/bobo", http.StatusNotFound, "Метрика по имени не найдена\n0"},
+		{"Четвёртая проверка", http.MethodGet, "/value/gauge/bobo", http.StatusNotFound, "Метрика по имени не найдена\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			storage := storage.NewMemStorage()
+			storage.SetGauge("Alloc", 123)
+			storage.SetCounter("PollCount", 42)
+			app := handler.NewApp(storage)
+
+			r := chi.NewRouter()
+			r.Get("/value/{type}/{name}", app.GetMetrics)
+
 			w := httptest.NewRecorder()
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			r.ServeHTTP(w, req)
+
 			if w.Code != tt.wantCode {
 				t.Errorf("Ожидался статус %d, получен %d", tt.wantCode, w.Code)
 				return
