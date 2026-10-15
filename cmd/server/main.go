@@ -18,7 +18,7 @@ func main() {
 	}
 }
 
-func run(cfg config.ConfigServer, storage storage.Storage) error {
+func run(cfg config.ConfigServer, storage handler.Storage) error {
 	app := handler.NewApp(storage)
 	r := chi.NewRouter()
 	r.Post("/update/{type}/{name}/{value}", app.PostMetrics)

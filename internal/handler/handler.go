@@ -2,19 +2,17 @@ package handler
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 
-	"github.com/DaMuG1337/MetricServices/internal/storage"
 	"github.com/go-chi/chi/v5"
 )
 
 type App struct {
-	storage storage.Storage
+	storage Storage
 }
 
-func NewApp(storage storage.Storage) *App {
+func NewApp(storage Storage) *App {
 	return &App{storage: storage}
 }
 
@@ -23,6 +21,7 @@ func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
 	nameMetric := chi.URLParam(r, "name")
 	if nameMetric == "" {
 		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 	valueMetric := chi.URLParam(r, "value")
 
@@ -35,7 +34,6 @@ func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 		a.storage.SetGauge(nameMetric, val)
 		w.WriteHeader(http.StatusOK)
-		log.Println(a.storage)
 		return
 	case "counter":
 		val, err := strconv.ParseInt(valueMetric, 10, 64)
@@ -45,7 +43,6 @@ func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
 		}
 		a.storage.AddCounter(nameMetric, val)
 		w.WriteHeader(http.StatusOK)
-		log.Println(a.storage)
 		return
 	default:
 		w.WriteHeader(http.StatusBadRequest)
@@ -72,6 +69,8 @@ func (a *App) GetMetrics(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		fmt.Fprintf(w, "%v", val)
+	default:
+		w.WriteHeader(http.StatusBadRequest)
 	}
 }
 

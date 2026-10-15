@@ -1,4 +1,4 @@
-package storage
+package handler
 
 type Storage interface {
 	SetGauge(name string, value float64)
