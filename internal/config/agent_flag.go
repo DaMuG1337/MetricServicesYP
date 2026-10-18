@@ -3,6 +3,7 @@ package config
 import (
 	"flag"
 	"os"
+	"strconv"
 )
 
 type ConfigAgent struct {
@@ -35,10 +36,10 @@ func AgentFlags() ConfigAgent {
 		c.Server.FlagRunAddr = v
 	}
 	if v := os.Getenv("REPORT_INTERVAL"); v != "" {
-		c.Server.FlagRunAddr = v
+		c.Poll.FlagReportInterval, _ = strconv.Atoi(v)
 	}
 	if v := os.Getenv("POLL_INTERVAL"); v != "" {
-		c.Server.FlagRunAddr = v
+		c.Poll.FlagPollInterval, _ = strconv.Atoi(v)
 	}
 	return c
 }

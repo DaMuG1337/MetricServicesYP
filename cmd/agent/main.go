@@ -90,7 +90,6 @@ func rangeMetrics(m *Metrics, cfg config.ConfigAgent) {
 
 func makeURLRequest(typeMetric, name string, value interface{}, cfg config.ConfigAgent) error {
 	s := fmt.Sprintf("http://%s/update/%s/%s/%v", cfg.Server.FlagRunAddr, typeMetric, name, value)
-	log.Print(s)
 	response, err := http.Post(s, "text/plain", nil)
 	if err != nil {
 		log.Println("Ошибка:", err)

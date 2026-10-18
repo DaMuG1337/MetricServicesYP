@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 
@@ -25,6 +24,5 @@ func run(cfg config.ConfigServer, storage handler.Storage) error {
 	r.Post("/update/{type}/{name}/{value}", app.PostMetrics)
 	r.Get("/value/{type}/{name}", app.GetMetrics)
 	r.Get("/", app.GetAllMetrics)
-	fmt.Println(cfg.FlagRunAddr)
 	return http.ListenAndServe(cfg.FlagRunAddr, r)
 }
