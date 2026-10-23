@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"math/rand/v2"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DaMuG1337/MetricServices/internal/config"
+	"github.com/DaMuG1337/MetricServices/internal/logger"
 )
 
 type Metrics struct {
@@ -22,6 +24,10 @@ func main() {
 		counter: map[string]int64{},
 	}
 	cfg := config.AgentFlags()
+
+	if err := logger.Initialize(); err != nil {
+		panic(err)
+	}
 
 	var met runtime.MemStats
 	pollInterval := cfg.Poll.FlagPollInterval
@@ -90,14 +96,27 @@ func rangeMetrics(m *Metrics, cfg config.ConfigAgent) {
 
 func makeURLRequest(typeMetric, name string, value interface{}, cfg config.ConfigAgent) error {
 	s := fmt.Sprintf("http://%s/update/%s/%s/%v", cfg.Server.FlagRunAddr, typeMetric, name, value)
+
+	start := time.Now()
+
+	logger.Log.Infow("request",
+		"URL", s,
+		"Метод", "POST",
+		"Время выполнения запроса", time.Since(start),
+	)
+
 	response, err := http.Post(s, "text/plain", nil)
 	if err != nil {
-		log.Println("Ошибка:", err)
 		return err
 	}
 	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		log.Println("Сервер вернул:", response.Status)
-	}
+
+	body, _ := io.ReadAll(response.Body)
+
+	logger.Log.Infow("response",
+		"Статус", response.StatusCode,
+		"Размер", len(body),
+	)
+
 	return nil
 }
