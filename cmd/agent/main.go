@@ -1,9 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"io"
-	"log"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/DaMuG1337/MetricServices/internal/config"
 	"github.com/DaMuG1337/MetricServices/internal/logger"
+	"github.com/DaMuG1337/MetricServices/internal/models"
 )
 
 type Metrics struct {
@@ -82,41 +83,40 @@ func addMetric(met runtime.MemStats, m *Metrics) {
 
 func rangeMetrics(m *Metrics, cfg config.ConfigAgent) {
 	for name, value := range m.gauge {
-		if err := makeURLRequest("gauge", name, value, cfg); err != nil {
-			log.Printf("Ошибка формирования запроса для %s: %v", name, err)
-		}
-	}
-	for name, value := range m.counter {
-		if err := makeURLRequest("counter", name, value, cfg); err != nil {
-			log.Printf("Ошибка формирования запроса для %s: %v", name, err)
-		}
+		v := value
+		makeJSONRequest(models.Metrics{
+			ID:    name,
+			MType: models.Gauge,
+			Value: &v,
+		}, cfg)
 	}
 	m.counter["PollCount"] = 0 // обнуляю счетчик после отправки
 }
 
-func makeURLRequest(typeMetric, name string, value interface{}, cfg config.ConfigAgent) error {
-	s := fmt.Sprintf("http://%s/update/%s/%s/%v", cfg.Server.FlagRunAddr, typeMetric, name, value)
-
-	start := time.Now()
-
-	logger.Log.Infow("request",
-		"URL", s,
-		"Метод", "POST",
-		"Время выполнения запроса", time.Since(start),
-	)
-
-	response, err := http.Post(s, "text/plain", nil)
+func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
+	body, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
-	defer response.Body.Close()
+	url := fmt.Sprintf("http://%s/update", cfg.Server.FlagRunAddr)
+	start := time.Now()
 
-	body, _ := io.ReadAll(response.Body)
+	logger.Log.Infow("request",
+		"URL", url,
+		"Метод", "POST",
+		"Время выполнения запроса", time.Since(start),
+	)
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("Запрос выполнен с кодом %d", resp.StatusCode)
+	}
 
 	logger.Log.Infow("response",
-		"Статус", response.StatusCode,
+		"Статус", resp.StatusCode,
 		"Размер", len(body),
 	)
-
 	return nil
 }
