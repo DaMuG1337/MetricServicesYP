@@ -111,7 +111,7 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
 		return err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Запрос выполнен с кодом %d", resp.StatusCode)
+		return fmt.Errorf("запрос выполнен с кодом %d", resp.StatusCode)
 	}
 
 	logger.Log.Infow("response",
