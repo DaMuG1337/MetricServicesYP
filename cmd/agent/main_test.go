@@ -1,146 +1,127 @@
 package main
 
 import (
-	"reflect"
-	"runtime"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
+
+	"github.com/DaMuG1337/MetricServices/internal/config"
+	"github.com/DaMuG1337/MetricServices/internal/logger"
+	"github.com/DaMuG1337/MetricServices/internal/models"
 )
 
-func Test_addMetric(t *testing.T) {
+func floatPtr(f float64) *float64 {
+	return &f
+}
+
+func int64Ptr(a int64) *int64 {
+	return &a
+}
+
+func TestMakeJSONRequest_Success(t *testing.T) {
+	if err := logger.Initialize(); err != nil {
+		t.Fatal(err)
+	}
 	tests := []struct {
-		name        string
-		met         runtime.MemStats
-		m           *Metrics
-		wantMetrics *Metrics
+		name    string
+		metrics models.Metrics
 	}{
 		{
-			name: "Тест 1 проверка на добавление метрик",
-			met:  runtime.MemStats{Alloc: 100},
-			m: &Metrics{
-				gauge:   map[string]float64{},
-				counter: map[string]int64{},
-			},
-			wantMetrics: &Metrics{
-				gauge: map[string]float64{
-					"Alloc":         100,
-					"BuckHashSys":   0,
-					"Frees":         0,
-					"GCCPUFraction": 0,
-					"GCSys":         0,
-					"HeapAlloc":     0,
-					"HeapIdle":      0,
-					"HeapInuse":     0,
-					"HeapObjects":   0,
-					"HeapReleased":  0,
-					"HeapSys":       0,
-					"LastGC":        0,
-					"Lookups":       0,
-					"MCacheInuse":   0,
-					"MCacheSys":     0,
-					"MSpanInuse":    0,
-					"MSpanSys":      0,
-					"Mallocs":       0,
-					"NextGC":        0,
-					"NumForcedGC":   0,
-					"NumGC":         0,
-					"OtherSys":      0,
-					"PauseTotalNs":  0,
-					"StackInuse":    0,
-					"StackSys":      0,
-					"Sys":           0,
-					"TotalAlloc":    0,
-				},
-				counter: map[string]int64{"PollCount": 1},
+			name: "gauge positive",
+			metrics: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+				Value: floatPtr(123.45),
 			},
 		},
 		{
-			name: "Тест 2 Gauge заменяется, а не накапливается",
-			met:  runtime.MemStats{Alloc: 999},
-			m: &Metrics{
-				gauge:   map[string]float64{"Alloc": 100},
-				counter: map[string]int64{},
-			},
-			wantMetrics: &Metrics{
-				gauge: map[string]float64{
-					"Alloc":         999,
-					"BuckHashSys":   0,
-					"Frees":         0,
-					"GCCPUFraction": 0,
-					"GCSys":         0,
-					"HeapAlloc":     0,
-					"HeapIdle":      0,
-					"HeapInuse":     0,
-					"HeapObjects":   0,
-					"HeapReleased":  0,
-					"HeapSys":       0,
-					"LastGC":        0,
-					"Lookups":       0,
-					"MCacheInuse":   0,
-					"MCacheSys":     0,
-					"MSpanInuse":    0,
-					"MSpanSys":      0,
-					"Mallocs":       0,
-					"NextGC":        0,
-					"NumForcedGC":   0,
-					"NumGC":         0,
-					"OtherSys":      0,
-					"PauseTotalNs":  0,
-					"StackInuse":    0,
-					"StackSys":      0,
-					"Sys":           0,
-					"TotalAlloc":    0,
-				},
-				counter: map[string]int64{"PollCount": 1},
+			name: "gauge zero",
+			metrics: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+				Value: floatPtr(0),
 			},
 		},
 		{
-			name: "Тест 3 PollCount увеличивается при повторном вызове",
-			met:  runtime.MemStats{},
-			m: &Metrics{
-				gauge:   map[string]float64{},
-				counter: map[string]int64{"PollCount": 5},
+			name: "gauge negative",
+			metrics: models.Metrics{
+				ID:    "Alloc",
+				MType: models.Gauge,
+				Value: floatPtr(-42.5),
 			},
-			wantMetrics: &Metrics{
-				gauge: map[string]float64{
-					"Alloc":         0,
-					"BuckHashSys":   0,
-					"Frees":         0,
-					"GCCPUFraction": 0,
-					"GCSys":         0,
-					"HeapAlloc":     0,
-					"HeapIdle":      0,
-					"HeapInuse":     0,
-					"HeapObjects":   0,
-					"HeapReleased":  0,
-					"HeapSys":       0,
-					"LastGC":        0,
-					"Lookups":       0,
-					"MCacheInuse":   0,
-					"MCacheSys":     0,
-					"MSpanInuse":    0,
-					"MSpanSys":      0,
-					"Mallocs":       0,
-					"NextGC":        0,
-					"NumForcedGC":   0,
-					"NumGC":         0,
-					"OtherSys":      0,
-					"PauseTotalNs":  0,
-					"StackInuse":    0,
-					"StackSys":      0,
-					"Sys":           0,
-					"TotalAlloc":    0,
-				},
-				counter: map[string]int64{"PollCount": 6},
+		},
+		{
+			name: "counter positive",
+			metrics: models.Metrics{
+				ID:    "PollCount",
+				MType: models.Counter,
+				Delta: int64Ptr(5),
+			},
+		},
+		{
+			name: "counter zero",
+			metrics: models.Metrics{
+				ID:    "PollCount",
+				MType: models.Counter,
+				Delta: int64Ptr(0),
+			},
+		},
+		{
+			name: "counter large",
+			metrics: models.Metrics{
+				ID:    "PollCount",
+				MType: models.Counter,
+				Delta: int64Ptr(1_000_000),
 			},
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			addMetric(tt.met, tt.m)
-			delete(tt.m.gauge, "RandomValue")
-			if !reflect.DeepEqual(tt.m, tt.wantMetrics) {
-				t.Errorf("Ожидалось: %v, получено: %v", tt.wantMetrics, tt.m)
-				return
+			var receivedBody []byte
+			var receivedContentType string
+			var receivedMethod string
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				receivedMethod = r.Method
+				receivedContentType = r.Header.Get("Content-Type")
+				receivedBody, _ = io.ReadAll(r.Body)
+				w.WriteHeader(http.StatusOK)
+			}))
+			defer srv.Close()
+
+			addr := strings.TrimPrefix(srv.URL, "http://")
+			cfg := config.ConfigAgent{
+				Server: config.ServerConfig{FlagRunAddr: addr},
+			}
+
+			err := makeJSONRequest(tt.metrics, cfg)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if receivedMethod != http.MethodPost {
+				t.Errorf("method = %s, want POST", receivedMethod)
+			}
+			if receivedContentType != "application/json" {
+				t.Errorf("content-type = %s, want application/json", receivedContentType)
+			}
+
+			var got models.Metrics
+			if err := json.Unmarshal(receivedBody, &got); err != nil {
+				t.Fatalf("invalid json: %v", err)
+			}
+			if got.ID != tt.metrics.ID || got.MType != tt.metrics.MType {
+				t.Errorf("id/type = %s/%s, want %s/%s", got.ID, got.MType, tt.metrics.ID, tt.metrics.MType)
+			}
+			if tt.metrics.Value != nil && (got.Value == nil || *got.Value != *tt.metrics.Value) {
+				t.Errorf("value = %v, want %v", got.Value, tt.metrics.Value)
+			}
+			if tt.metrics.Delta != nil && (got.Delta == nil || *got.Delta != *tt.metrics.Delta) {
+				t.Errorf("delta = %v, want %v", got.Delta, tt.metrics.Delta)
 			}
 		})
 	}
