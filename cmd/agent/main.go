@@ -98,7 +98,7 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
 	if err != nil {
 		return err
 	}
-	url := fmt.Sprintf("http://%s/update", cfg.Server.FlagRunAddr)
+	url := fmt.Sprintf("http://%s/update/", cfg.Server.FlagRunAddr)
 	start := time.Now()
 
 	logger.Log.Infow("request",
@@ -110,6 +110,8 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("запрос выполнен с кодом %d", resp.StatusCode)
 	}
