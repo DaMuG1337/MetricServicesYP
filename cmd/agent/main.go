@@ -90,6 +90,14 @@ func rangeMetrics(m *Metrics, cfg config.ConfigAgent) {
 			Value: &v,
 		}, cfg)
 	}
+	for name, value := range m.counter {
+		v := value
+		makeJSONRequest(models.Metrics{
+			ID:    name,
+			MType: models.Counter,
+			Delta: &v,
+		}, cfg)
+	}
 	m.counter["PollCount"] = 0 // обнуляю счетчик после отправки
 }
 
@@ -98,7 +106,7 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
 	if err != nil {
 		return err
 	}
-	url := fmt.Sprintf("http://%s/update/", cfg.Server.FlagRunAddr)
+	url := fmt.Sprintf("http://%s/update", cfg.Server.FlagRunAddr)
 	start := time.Now()
 
 	logger.Log.Infow("request",
