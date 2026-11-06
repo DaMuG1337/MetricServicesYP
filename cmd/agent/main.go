@@ -9,16 +9,19 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/DaMuG1337/MetricServices/internal/compress"
 	"github.com/DaMuG1337/MetricServices/internal/config"
 	"github.com/DaMuG1337/MetricServices/internal/logger"
 	"github.com/DaMuG1337/MetricServices/internal/models"
 )
 
+// инициализирую метрику с 2 типами
 type Metrics struct {
 	gauge   map[string]float64
 	counter map[string]int64
 }
 
+// основная функция агента
 func main() {
 	m := Metrics{
 		gauge:   map[string]float64{},
@@ -106,6 +109,10 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
 	if err != nil {
 		return err
 	}
+	compressed, err := compress.Compress(body)
+	if err != nil {
+		return err
+	}
 	url := fmt.Sprintf("http://%s/update", cfg.Server.FlagRunAddr)
 	start := time.Now()
 
@@ -114,7 +121,15 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
 		"Метод", "POST",
 		"Время выполнения запроса", time.Since(start),
 	)
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressed))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
