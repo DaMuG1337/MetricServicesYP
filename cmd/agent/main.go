@@ -1,27 +1,37 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
 	"time"
 
+	"github.com/DaMuG1337/MetricServices/internal/compress"
 	"github.com/DaMuG1337/MetricServices/internal/config"
+	"github.com/DaMuG1337/MetricServices/internal/logger"
+	"github.com/DaMuG1337/MetricServices/internal/models"
 )
 
+// инициализирую метрику с 2 типами
 type Metrics struct {
 	gauge   map[string]float64
 	counter map[string]int64
 }
 
+// основная функция агента
 func main() {
 	m := Metrics{
 		gauge:   map[string]float64{},
 		counter: map[string]int64{},
 	}
 	cfg := config.AgentFlags()
+
+	if err := logger.Initialize(); err != nil {
+		panic(err)
+	}
 
 	var met runtime.MemStats
 	pollInterval := cfg.Poll.FlagPollInterval
@@ -76,28 +86,62 @@ func addMetric(met runtime.MemStats, m *Metrics) {
 
 func rangeMetrics(m *Metrics, cfg config.ConfigAgent) {
 	for name, value := range m.gauge {
-		if err := makeURLRequest("gauge", name, value, cfg); err != nil {
-			log.Printf("Ошибка формирования запроса для %s: %v", name, err)
-		}
+		v := value
+		makeJSONRequest(models.Metrics{
+			ID:    name,
+			MType: models.Gauge,
+			Value: &v,
+		}, cfg)
 	}
 	for name, value := range m.counter {
-		if err := makeURLRequest("counter", name, value, cfg); err != nil {
-			log.Printf("Ошибка формирования запроса для %s: %v", name, err)
-		}
+		v := value
+		makeJSONRequest(models.Metrics{
+			ID:    name,
+			MType: models.Counter,
+			Delta: &v,
+		}, cfg)
 	}
 	m.counter["PollCount"] = 0 // обнуляю счетчик после отправки
 }
 
-func makeURLRequest(typeMetric, name string, value interface{}, cfg config.ConfigAgent) error {
-	s := fmt.Sprintf("http://%s/update/%s/%s/%v", cfg.Server.FlagRunAddr, typeMetric, name, value)
-	response, err := http.Post(s, "text/plain", nil)
+func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
+	body, err := json.Marshal(m)
 	if err != nil {
-		log.Println("Ошибка:", err)
 		return err
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		log.Println("Сервер вернул:", response.Status)
+	compressed, err := compress.Compress(body)
+	if err != nil {
+		return err
 	}
+	url := fmt.Sprintf("http://%s/update", cfg.Server.FlagRunAddr)
+	start := time.Now()
+
+	logger.Log.Infow("request",
+		"URL", url,
+		"Метод", "POST",
+		"Время выполнения запроса", time.Since(start),
+	)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressed))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("запрос выполнен с кодом %d", resp.StatusCode)
+	}
+
+	logger.Log.Infow("response",
+		"Статус", resp.StatusCode,
+		"Размер", len(body),
+	)
 	return nil
 }

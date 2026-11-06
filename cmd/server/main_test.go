@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DaMuG1337/MetricServices/internal/handler"
@@ -80,6 +81,127 @@ func TestApp_getMetrics(t *testing.T) {
 			if w.Body.String() != tt.wantValue {
 				t.Errorf("Ожидалось тело %q, получено %q", tt.wantValue, w.Body.String())
 				return
+			}
+		})
+	}
+}
+
+func TestApp_postJSONMetrics(t *testing.T) {
+	tests := []struct {
+		name         string
+		method       string
+		body         string
+		expectedCode int
+	}{
+		{"Первая проверка", http.MethodPost, `{"id": "Alloc", "type": "gauge", "value": 123}`, http.StatusOK},
+		{"valid counter", http.MethodPost, `{"id":"PollCount","type":"counter","delta":5}`, http.StatusOK},
+		{"invalid json", http.MethodPost, `{invalid`, http.StatusBadRequest},
+		{"empty id", http.MethodPost, `{"id":"","type":"gauge","value":123}`, http.StatusNotFound},
+		{"nil value", http.MethodPost, `{"id":"Alloc","type":"gauge"}`, http.StatusBadRequest},
+		{"nil delta", http.MethodPost, `{"id":"PollCount","type":"counter"}`, http.StatusBadRequest},
+		{"unknown type", http.MethodPost, `{"id":"Alloc","type":"unknown","value":123}`, http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storage := storage.NewMemStorage()
+			app := handler.NewApp(storage)
+			r := chi.NewRouter()
+			r.Post("/update", app.PostMetricsJSON)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, "/update", strings.NewReader(tt.body))
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedCode {
+				t.Errorf("code = %d, want %d", w.Code, tt.expectedCode)
+			}
+		})
+	}
+}
+
+func TestApp_getJSONMetrics(t *testing.T) {
+	tests := []struct {
+		name         string
+		method       string
+		body         string
+		setup        func(s handler.Storage)
+		expectedCode int
+		expectedBody string
+	}{
+		{
+			name:   "valid gauge",
+			method: http.MethodPost,
+			body:   `{"id":"Alloc","type":"gauge"}`,
+			setup: func(s handler.Storage) {
+				s.SetGauge("Alloc", 123.45)
+			},
+			expectedCode: http.StatusOK,
+			expectedBody: `{"id":"Alloc","type":"gauge","value":123.45}`,
+		},
+		{
+			name:   "valid counter",
+			method: http.MethodPost,
+			body:   `{"id":"PollCount","type":"counter"}`,
+			setup: func(s handler.Storage) {
+				s.AddCounter("PollCount", 5)
+			},
+			expectedCode: http.StatusOK,
+			expectedBody: `{"id":"PollCount","type":"counter","delta":5}`,
+		},
+		{
+			name:         "metric not found",
+			method:       http.MethodPost,
+			body:         `{"id":"Unknown","type":"gauge"}`,
+			setup:        func(s handler.Storage) {},
+			expectedCode: http.StatusNotFound,
+			expectedBody: "",
+		},
+		{
+			name:         "invalid json",
+			method:       http.MethodPost,
+			body:         `{invalid`,
+			setup:        func(s handler.Storage) {},
+			expectedCode: http.StatusBadRequest,
+			expectedBody: "",
+		},
+		{
+			name:         "empty id",
+			method:       http.MethodPost,
+			body:         `{"id":"","type":"gauge"}`,
+			setup:        func(s handler.Storage) {},
+			expectedCode: http.StatusNotFound,
+			expectedBody: "",
+		},
+		{
+			name:         "unknown type",
+			method:       http.MethodPost,
+			body:         `{"id":"Alloc","type":"unknown"}`,
+			setup:        func(s handler.Storage) {},
+			expectedCode: http.StatusBadRequest,
+			expectedBody: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storage := storage.NewMemStorage()
+			tt.setup(storage)
+
+			app := handler.NewApp(storage)
+
+			r := chi.NewRouter()
+			r.Post("/value", app.GetMetricsJSON)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, "/value", strings.NewReader(tt.body))
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedCode {
+				t.Errorf("code = %d, want %d", w.Code, tt.expectedCode)
+			}
+			if tt.expectedBody != "" && strings.TrimSpace(w.Body.String()) != tt.expectedBody {
+				t.Errorf("body = %q, want %q", w.Body.String(), tt.expectedBody)
 			}
 		})
 	}
