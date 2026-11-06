@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -83,11 +85,13 @@ func TestMakeJSONRequest_Success(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var receivedBody []byte
 			var receivedContentType string
+			var receivedContentEncoding string
 			var receivedMethod string
 
 			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				receivedMethod = r.Method
 				receivedContentType = r.Header.Get("Content-Type")
+				receivedContentEncoding = r.Header.Get("Content-Encoding")
 				receivedBody, _ = io.ReadAll(r.Body)
 				w.WriteHeader(http.StatusOK)
 			}))
@@ -109,9 +113,23 @@ func TestMakeJSONRequest_Success(t *testing.T) {
 			if receivedContentType != "application/json" {
 				t.Errorf("content-type = %s, want application/json", receivedContentType)
 			}
+			if receivedContentEncoding != "gzip" {
+				t.Errorf("content-encoding = %s, want gzip", receivedContentEncoding)
+			}
+
+			zr, err := gzip.NewReader(bytes.NewReader(receivedBody))
+			if err != nil {
+				t.Fatalf("failed to create gzip reader: %v", err)
+			}
+			defer zr.Close()
+
+			decompressed, err := io.ReadAll(zr)
+			if err != nil {
+				t.Fatalf("failed to decompress: %v", err)
+			}
 
 			var got models.Metrics
-			if err := json.Unmarshal(receivedBody, &got); err != nil {
+			if err := json.Unmarshal(decompressed, &got); err != nil {
 				t.Fatalf("invalid json: %v", err)
 			}
 			if got.ID != tt.metrics.ID || got.MType != tt.metrics.MType {
