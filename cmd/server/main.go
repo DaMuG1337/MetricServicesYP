@@ -32,6 +32,6 @@ func run(cfg config.ConfigServer, storage handler.Storage) error {
 	r.Post("/value", logger.LogResponse(http.HandlerFunc(app.GetMetricsJSON)))
 	r.Post("/value/", logger.LogResponse(http.HandlerFunc(app.GetMetricsJSON)))
 	r.Get("/value/{type}/{name}", logger.LogResponse(http.HandlerFunc(app.GetMetrics)))
-	r.Get("/", logger.LogResponse(http.HandlerFunc(app.GetAllMetrics)))
+	r.Get("/", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.GetAllMetrics))))
 	return http.ListenAndServe(cfg.FlagRunAddr, r)
 }
