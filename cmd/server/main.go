@@ -26,12 +26,12 @@ func main() {
 func run(cfg config.ConfigServer, storage handler.Storage) error {
 	app := handler.NewApp(storage)
 	r := chi.NewRouter()
-	r.Post("/update/{type}/{name}/{value}", logger.LogResponse(http.HandlerFunc(app.PostMetrics)))
+	r.Post("/update/{type}/{name}/{value}", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.PostMetrics))))
 	r.Post("/update", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.PostMetricsJSON))))
 	r.Post("/update/", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.PostMetricsJSON))))
-	r.Post("/value", logger.LogResponse(http.HandlerFunc(app.GetMetricsJSON)))
-	r.Post("/value/", logger.LogResponse(http.HandlerFunc(app.GetMetricsJSON)))
-	r.Get("/value/{type}/{name}", logger.LogResponse(http.HandlerFunc(app.GetMetrics)))
+	r.Post("/value", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.GetMetricsJSON))))
+	r.Post("/value/", logger.LogResponse(http.HandlerFunc(gzip.GzipMiddleware(app.GetMetricsJSON))))
+	r.Get("/value/{type}/{name}", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.GetMetrics))))
 	r.Get("/", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.GetAllMetrics))))
 	return http.ListenAndServe(cfg.FlagRunAddr, r)
 }

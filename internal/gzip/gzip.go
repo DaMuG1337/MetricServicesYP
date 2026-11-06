@@ -26,6 +26,20 @@ func (c *compressWriter) Header() http.Header {
 	return c.w.Header()
 }
 
+func (c *compressWriter) WriteHeader(statusCode int) {
+	if c.wroteHeader {
+		return
+	}
+	c.wroteHeader = true
+
+	h := c.w.Header().Get("Content-Type")
+	if statusCode < 300 && (strings.HasPrefix(h, "application/json") || strings.HasPrefix(h, "text/html")) {
+		c.w.Header().Set("Content-Encoding", "gzip")
+		c.compress = true
+	}
+	c.w.WriteHeader(statusCode)
+}
+
 func (c *compressWriter) Write(p []byte) (int, error) {
 	if !c.wroteHeader {
 		c.WriteHeader(http.StatusOK)
@@ -34,18 +48,6 @@ func (c *compressWriter) Write(p []byte) (int, error) {
 		return c.w.Write(p)
 	}
 	return c.zw.Write(p)
-}
-
-func (c *compressWriter) WriteHeader(statusCode int) {
-	if !c.wroteHeader {
-		return
-	}
-	c.wroteHeader = true
-	h := c.w.Header().Get("Content-Type")
-	if statusCode < 300 && strings.HasPrefix(h, "application/json") || strings.HasPrefix(h, "text/html") {
-		c.w.WriteHeader(statusCode)
-	}
-	c.w.WriteHeader(statusCode)
 }
 
 func (c *compressWriter) Close() error {
