@@ -1,19 +1,87 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 
+	"github.com/DaMuG1337/MetricServices/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 
 type App struct {
-	storage Storage
+	storage  Storage
+	onUpdate func()
 }
 
-func NewApp(storage Storage) *App {
-	return &App{storage: storage}
+func NewApp(storage Storage, onUpdate func()) *App {
+	return &App{storage: storage, onUpdate: onUpdate}
+}
+
+func (a *App) PostMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	var req models.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if req.ID == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	switch req.MType {
+	case models.Gauge:
+		if req.Value == nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		a.storage.SetGauge(req.ID, *req.Value)
+		w.WriteHeader(http.StatusOK)
+		return
+	case models.Counter:
+		if req.Delta == nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		a.storage.AddCounter(req.ID, *req.Delta)
+		w.WriteHeader(http.StatusOK)
+		return
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+	}
+}
+
+func (a *App) GetMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	var req models.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if req.MType == "" || req.ID == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	switch req.MType {
+	case models.Gauge:
+		val, ok := a.storage.GetGauge(req.ID)
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+		}
+		req.Value = &val
+	case models.Counter:
+		val, ok := a.storage.GetCounter(req.ID)
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+		}
+		req.Delta = &val
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(req)
 }
 
 func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {

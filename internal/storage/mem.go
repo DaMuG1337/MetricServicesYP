@@ -1,5 +1,7 @@
 package storage
 
+import "github.com/DaMuG1337/MetricServices/internal/models"
+
 type MemStorage struct {
 	gauge   map[string]float64
 	counter map[string]int64
@@ -46,6 +48,27 @@ func (m *MemStorage) GetAllCounters() map[string]int64 {
 	result := make(map[string]int64, len(m.counter))
 	for k, v := range m.counter {
 		result[k] = v
+	}
+	return result
+}
+
+func (m *MemStorage) GetAllMetrics() []models.Metrics {
+	var result []models.Metrics
+	for name, value := range m.gauge {
+		v := value
+		result = append(result, models.Metrics{
+			ID:    name,
+			MType: models.Gauge,
+			Value: &v,
+		})
+	}
+	for name, value := range m.counter {
+		v := value
+		result = append(result, models.Metrics{
+			ID:    name,
+			MType: models.Counter,
+			Delta: &v,
+		})
 	}
 	return result
 }
