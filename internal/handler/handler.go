@@ -11,11 +11,12 @@ import (
 )
 
 type App struct {
-	storage Storage
+	storage  Storage
+	onUpdate func()
 }
 
-func NewApp(storage Storage) *App {
-	return &App{storage: storage}
+func NewApp(storage Storage, onUpdate func()) *App {
+	return &App{storage: storage, onUpdate: onUpdate}
 }
 
 func (a *App) PostMetricsJSON(w http.ResponseWriter, r *http.Request) {

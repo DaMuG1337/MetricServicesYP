@@ -7,8 +7,7 @@ import (
 
 func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
-		// который будем передавать следующей функции
+		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот, который будем передавать следующей функции
 		ow := w
 
 		// проверяем, что клиент умеет получать от сервера сжатые данные в формате gzip
@@ -19,7 +18,6 @@ func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 			cw := newCompressWriter(w)
 			// меняем оригинальный http.ResponseWriter на новый
 			ow = cw
-			// не забываем отправить клиенту все сжатые данные после завершения middleware
 			defer cw.Close()
 		}
 
