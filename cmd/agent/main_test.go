@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/DaMuG1337/MetricServices/internal/config"
-	"github.com/DaMuG1337/MetricServices/internal/logger"
 	"github.com/DaMuG1337/MetricServices/internal/models"
+	"go.uber.org/zap"
 )
 
 func floatPtr(f float64) *float64 {
@@ -24,9 +24,6 @@ func int64Ptr(a int64) *int64 {
 }
 
 func TestMakeJSONRequest_Success(t *testing.T) {
-	if err := logger.Initialize(); err != nil {
-		t.Fatal(err)
-	}
 	tests := []struct {
 		name    string
 		metrics models.Metrics
@@ -102,7 +99,8 @@ func TestMakeJSONRequest_Success(t *testing.T) {
 				Server: config.ServerConfig{FlagRunAddr: addr},
 			}
 
-			err := makeJSONRequest(tt.metrics, cfg)
+			logger := zap.NewNop().Sugar()
+			err := makeJSONRequest(tt.metrics, cfg, logger)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"net/http"
 
 	"github.com/DaMuG1337/MetricServices/internal/config"
@@ -9,42 +8,48 @@ import (
 	"github.com/DaMuG1337/MetricServices/internal/gzip"
 	"github.com/DaMuG1337/MetricServices/internal/handler"
 	"github.com/DaMuG1337/MetricServices/internal/logger"
+	mylog "github.com/DaMuG1337/MetricServices/internal/logger"
 	"github.com/DaMuG1337/MetricServices/internal/storage"
 	"github.com/go-chi/chi/v5"
+	"go.uber.org/zap"
 )
 
 func main() {
-	if err := logger.Initialize(); err != nil {
-		panic(err)
-	}
 	cfg := config.ServerFlags()
-	storage := storage.NewMemStorage()
-	if err := run(cfg, storage); err != nil {
-		log.Fatal(err)
+	logger, err := logger.New()
+	if err != nil {
+		logger.Error("Ошибка запуска логгера", err)
+	}
+	storage, err := storage.NewMemStorage(cfg.Save.FilePath, cfg.Save.LoadFile)
+	if err != nil {
+		logger.Error("Ошибка конструктора метрик", err)
+	}
+	if cfg.Save.LoadFile {
+		logger.Infow("Метрики загружены из файла", cfg.Save.FilePath)
+	}
+	if err := run(cfg, storage, logger); err != nil {
+		logger.Error("Ошибка запуска сервера", err)
 	}
 }
 
-func run(cfg config.ConfigServer, storage handler.Storage) error {
-	onUpdate := filesave.SyncSaveFile(cfg.Save.FilePath, cfg.Save.Interval, storage)
+func run(cfg config.ConfigServer, storage handler.Storage, logger *zap.SugaredLogger) error {
+	onUpdate := filesave.SyncSaveFile(cfg.Save.FilePath, cfg.Save.Interval, storage, logger)
 	app := handler.NewApp(storage, onUpdate)
 	r := chi.NewRouter()
-	if cfg.Save.LoadFile {
-		if err := filesave.LoadFileMetrics(cfg.Save.FilePath, storage); err != nil {
-			logger.Log.Errorw("Ошибка загрузки метрик из файла", err)
-		} else {
-			logger.Log.Infow("Метрики загружены из файла", cfg.Save.FilePath)
-		}
-	}
-	r.Post("/update/{type}/{name}/{value}", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.PostMetrics))))
-	r.Post("/update", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.PostMetricsJSON))))
-	r.Post("/update/", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.PostMetricsJSON))))
-	r.Post("/value", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.GetMetricsJSON))))
-	r.Post("/value/", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.GetMetricsJSON))))
-	r.Get("/value/{type}/{name}", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.GetMetrics))))
-	r.Get("/", logger.LogResponse(gzip.GzipMiddleware(http.HandlerFunc(app.GetAllMetrics))))
+
+	r.Use(mylog.LogResponse(logger))
+	r.Use(gzip.GzipMiddleware)
+
+	r.Post("/update/{type}/{name}/{value}", app.PostMetrics)
+	r.Post("/update", app.PostMetricsJSON)
+	r.Post("/update/", app.PostMetricsJSON)
+	r.Post("/value", app.GetMetricsJSON)
+	r.Post("/value/", app.GetMetricsJSON)
+	r.Get("/value/{type}/{name}", app.GetMetrics)
+	r.Get("/", app.GetAllMetrics)
 
 	if cfg.Save.Interval > 0 {
-		go filesave.RunSaveMetrics(cfg.Save.FilePath, cfg.Save.Interval, storage)
+		go filesave.RunSaveMetrics(cfg.Save.FilePath, cfg.Save.Interval, storage, logger)
 	}
 	return http.ListenAndServe(cfg.FlagRunAddr, r)
 }

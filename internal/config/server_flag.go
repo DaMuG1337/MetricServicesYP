@@ -4,6 +4,8 @@ import (
 	"flag"
 	"os"
 	"strconv"
+
+	"github.com/DaMuG1337/MetricServices/internal/logger"
 )
 
 type ConfigServer struct {
@@ -19,6 +21,10 @@ type SaveParam struct {
 
 func ServerFlags() ConfigServer {
 	var c ConfigServer
+	logger, err := logger.New()
+	if err != nil {
+		logger.Error("Ошибка запуска логгера", err)
+	}
 	c.FlagRunAddr = "localhost:8080"
 	c.Save.Interval = 300
 	c.Save.FilePath = "metrics.json"
@@ -30,20 +36,24 @@ func ServerFlags() ConfigServer {
 	flag.BoolVar(&c.Save.LoadFile, "r", false, "load old metrics")
 	flag.Parse()
 
-	if v := os.Getenv("ADDRESS"); v != "" {
+	if v, ok := os.LookupEnv("ADDRESS"); ok {
 		c.FlagRunAddr = v
 	}
-	if v := os.Getenv("STORE_INTERVAL"); v != "" {
+	if v, ok := os.LookupEnv("STORE_INTERVAL"); ok {
 		if b, err := strconv.Atoi(v); err == nil {
 			c.Save.Interval = b
+		} else {
+			logger.Infof("невалидный STORE_INTERVAL=%q: %v", v, err)
 		}
 	}
-	if v := os.Getenv("FILE_STORAGE_PATH"); v != "" {
+	if v, ok := os.LookupEnv("FILE_STORAGE_PATH"); ok {
 		c.Save.FilePath = v
 	}
-	if v := os.Getenv("RESTORE"); v != "" {
+	if v, ok := os.LookupEnv("RESTORE"); ok {
 		if b, err := strconv.ParseBool(v); err == nil {
 			c.Save.LoadFile = b
+		} else {
+			logger.Infof("невалидный STORE_INTERVAL=%q: %v", v, err)
 		}
 	}
 	return c

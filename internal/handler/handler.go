@@ -37,6 +37,9 @@ func (a *App) PostMetricsJSON(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.storage.SetGauge(req.ID, *req.Value)
+		if a.onUpdate != nil {
+			a.onUpdate()
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	case models.Counter:
@@ -45,6 +48,9 @@ func (a *App) PostMetricsJSON(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.storage.AddCounter(req.ID, *req.Delta)
+		if a.onUpdate != nil {
+			a.onUpdate()
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	default:
@@ -67,12 +73,14 @@ func (a *App) GetMetricsJSON(w http.ResponseWriter, r *http.Request) {
 		val, ok := a.storage.GetGauge(req.ID)
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 		req.Value = &val
 	case models.Counter:
 		val, ok := a.storage.GetCounter(req.ID)
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
+			return
 		}
 		req.Delta = &val
 	default:
@@ -101,6 +109,9 @@ func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.storage.SetGauge(nameMetric, val)
+		if a.onUpdate != nil {
+			a.onUpdate()
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	case "counter":
@@ -110,6 +121,9 @@ func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.storage.AddCounter(nameMetric, val)
+		if a.onUpdate != nil {
+			a.onUpdate()
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	default:

@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/DaMuG1337/MetricServices/internal/handler"
-	"github.com/DaMuG1337/MetricServices/internal/logger"
 	"github.com/DaMuG1337/MetricServices/internal/models"
 	"github.com/DaMuG1337/MetricServices/internal/storage"
+	"go.uber.org/zap"
 )
 
 func floatPtr(f float64) *float64 { return &f }
@@ -146,81 +146,7 @@ func TestLoadToFile(t *testing.T) {
 	}
 }
 
-func TestLoadFileMetrics(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(path string) error
-		wantGauge map[string]float64
-		wantCntr  map[string]int64
-		wantErr   bool
-	}{
-		{
-			name: "gauge и counter",
-			setup: func(path string) error {
-				return SaveToFile(path, []models.Metrics{
-					{ID: "Alloc", MType: models.Gauge, Value: floatPtr(123.45)},
-					{ID: "PollCount", MType: models.Counter, Delta: int64Ptr(5)},
-				})
-			},
-			wantGauge: map[string]float64{"Alloc": 123.45},
-			wantCntr:  map[string]int64{"PollCount": 5},
-			wantErr:   false,
-		},
-		{
-			name:      "файл не существует",
-			setup:     func(path string) error { return nil },
-			wantGauge: nil,
-			wantCntr:  nil,
-			wantErr:   true,
-		},
-		{
-			name: "только gauge",
-			setup: func(path string) error {
-				return SaveToFile(path, []models.Metrics{
-					{ID: "Alloc", MType: models.Gauge, Value: floatPtr(1.5)},
-				})
-			},
-			wantGauge: map[string]float64{"Alloc": 1.5},
-			wantCntr:  map[string]int64{},
-			wantErr:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			dir := t.TempDir()
-			path := filepath.Join(dir, "metrics.json")
-
-			if err := tt.setup(path); err != nil {
-				t.Fatalf("Ошибка подготовки: %v", err)
-			}
-
-			st := storage.NewMemStorage()
-			err := LoadFileMetrics(path, st)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("LoadFileMetrics() ошибка = %v, ожидалась = %v", err, tt.wantErr)
-				return
-			}
-
-			if !tt.wantErr {
-				for id, want := range tt.wantGauge {
-					if got, ok := st.GetGauge(id); !ok || got != want {
-						t.Errorf("Gauge %s = %v, ok=%v, ожидалось %v", id, got, ok, want)
-					}
-				}
-				for id, want := range tt.wantCntr {
-					if got, ok := st.GetCounter(id); !ok || got != want {
-						t.Errorf("Counter %s = %v, ok=%v, ожидалось %v", id, got, ok, want)
-					}
-				}
-			}
-		})
-	}
-}
 func TestSyncSaveFile(t *testing.T) {
-	if err := logger.Initialize(); err != nil {
-		t.Fatal(err)
-	}
 	tests := []struct {
 		name     string
 		interval int
@@ -240,8 +166,12 @@ func TestSyncSaveFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			st := storage.NewMemStorage()
-			fn := SyncSaveFile("test.json", tt.interval, st)
+			st, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			log := zap.NewNop().Sugar()
+			fn := SyncSaveFile("test.json", tt.interval, st, log)
 
 			if (fn == nil) != tt.wantNil {
 				t.Errorf("SyncSaveFile() = %T, ожидался nil = %v", fn, tt.wantNil)
@@ -281,10 +211,14 @@ func TestSyncSaveFile_SavesFile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "metrics.json")
-			st := storage.NewMemStorage()
+			st, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
 			tt.setup(st)
 
-			fn := SyncSaveFile(path, 0, st)
+			log := zap.NewNop().Sugar()
+			fn := SyncSaveFile(path, 0, st, log)
 			if fn == nil {
 				t.Fatal("SyncSaveFile() вернул nil, ожидалась функция")
 			}
@@ -327,10 +261,14 @@ func TestRunSaveMetrics(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
 			path := filepath.Join(dir, "metrics.json")
-			st := storage.NewMemStorage()
+			st, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
 			tt.setup(st)
 
-			go RunSaveMetrics(path, tt.interval, st)
+			log := zap.NewNop().Sugar()
+			go RunSaveMetrics(path, tt.interval, st, log)
 
 			deadline := time.Now().Add(3 * time.Second)
 			for time.Now().Before(deadline) {

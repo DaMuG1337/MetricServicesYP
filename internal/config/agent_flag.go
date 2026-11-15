@@ -4,6 +4,8 @@ import (
 	"flag"
 	"os"
 	"strconv"
+
+	"go.uber.org/zap"
 )
 
 type ConfigAgent struct {
@@ -20,7 +22,7 @@ type PollConfig struct {
 	FlagPollInterval   int
 }
 
-func AgentFlags() ConfigAgent {
+func AgentFlags(logger *zap.SugaredLogger) ConfigAgent {
 	var c ConfigAgent
 	c.Server.FlagRunAddr = "localhost:8080"
 	c.Poll.FlagReportInterval = 10
@@ -32,14 +34,22 @@ func AgentFlags() ConfigAgent {
 	CommandLine.IntVar(&c.Poll.FlagPollInterval, "p", 2, "poll interval in seconds")
 	CommandLine.Parse(os.Args[1:])
 
-	if v := os.Getenv("ADDRESS"); v != "" {
+	if v, ok := os.LookupEnv("ADDRESS"); ok {
 		c.Server.FlagRunAddr = v
 	}
-	if v := os.Getenv("REPORT_INTERVAL"); v != "" {
-		c.Poll.FlagReportInterval, _ = strconv.Atoi(v)
+	if v, ok := os.LookupEnv("REPORT_INTERVAL"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Poll.FlagReportInterval = n
+		} else {
+			logger.Infof("невалидный REPORT_INTERVAL=%q: %v", v, err)
+		}
 	}
-	if v := os.Getenv("POLL_INTERVAL"); v != "" {
-		c.Poll.FlagPollInterval, _ = strconv.Atoi(v)
+	if v, ok := os.LookupEnv("POLL_INTERVAL"); ok {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Poll.FlagPollInterval = n
+		} else {
+			logger.Infof("невалидный POLL_INTERVAL=%q: %v", v, err)
+		}
 	}
 	return c
 }

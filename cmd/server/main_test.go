@@ -29,7 +29,10 @@ func TestApp_postMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := storage.NewMemStorage()
+			storage, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
 			app := handler.NewApp(storage, nil)
 
 			r := chi.NewRouter()
@@ -62,7 +65,10 @@ func TestApp_getMetrics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := storage.NewMemStorage()
+			storage, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
 			storage.SetGauge("Alloc", 123)
 			storage.SetCounter("PollCount", 42)
 			app := handler.NewApp(storage, nil)
@@ -104,7 +110,10 @@ func TestApp_postJSONMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := storage.NewMemStorage()
+			storage, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
 			app := handler.NewApp(storage, nil)
 			r := chi.NewRouter()
 			r.Post("/update", app.PostMetricsJSON)
@@ -185,7 +194,10 @@ func TestApp_getJSONMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := storage.NewMemStorage()
+			storage, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
 			tt.setup(storage)
 
 			app := handler.NewApp(storage, nil)

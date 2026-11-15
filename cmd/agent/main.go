@@ -9,10 +9,11 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/DaMuG1337/MetricServices/internal/compress"
 	"github.com/DaMuG1337/MetricServices/internal/config"
+	"github.com/DaMuG1337/MetricServices/internal/gzip/compress"
 	"github.com/DaMuG1337/MetricServices/internal/logger"
 	"github.com/DaMuG1337/MetricServices/internal/models"
+	"go.uber.org/zap"
 )
 
 // инициализирую метрику с 2 типами
@@ -27,11 +28,12 @@ func main() {
 		gauge:   map[string]float64{},
 		counter: map[string]int64{},
 	}
-	cfg := config.AgentFlags()
 
-	if err := logger.Initialize(); err != nil {
-		panic(err)
+	logger, err := logger.New()
+	if err != nil {
+		logger.Error("Ошибка запуска логгера", err)
 	}
+	cfg := config.AgentFlags(logger)
 
 	var met runtime.MemStats
 	pollInterval := cfg.Poll.FlagPollInterval
@@ -44,7 +46,7 @@ func main() {
 		pollCount++
 
 		if pollCount%(reportInterval/pollInterval) == 0 {
-			rangeMetrics(&m, cfg)
+			rangeMetrics(&m, cfg, logger)
 		}
 
 		time.Sleep(time.Duration(pollInterval) * time.Second)
@@ -84,27 +86,31 @@ func addMetric(met runtime.MemStats, m *Metrics) {
 	m.gauge["TotalAlloc"] = float64(met.TotalAlloc)
 }
 
-func rangeMetrics(m *Metrics, cfg config.ConfigAgent) {
+func rangeMetrics(m *Metrics, cfg config.ConfigAgent, logger *zap.SugaredLogger) {
 	for name, value := range m.gauge {
 		v := value
-		makeJSONRequest(models.Metrics{
+		if err := makeJSONRequest(models.Metrics{
 			ID:    name,
 			MType: models.Gauge,
 			Value: &v,
-		}, cfg)
+		}, cfg, logger); err != nil {
+			logger.Error("запрос выполнен с кодом %")
+		}
 	}
 	for name, value := range m.counter {
 		v := value
-		makeJSONRequest(models.Metrics{
+		if err := makeJSONRequest(models.Metrics{
 			ID:    name,
 			MType: models.Counter,
 			Delta: &v,
-		}, cfg)
+		}, cfg, logger); err != nil {
+			logger.Error("запрос выполнен с кодом %")
+		}
 	}
 	m.counter["PollCount"] = 0 // обнуляю счетчик после отправки
 }
 
-func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
+func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent, logger *zap.SugaredLogger) error {
 	body, err := json.Marshal(m)
 	if err != nil {
 		return err
@@ -113,10 +119,10 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
 	if err != nil {
 		return err
 	}
-	url := fmt.Sprintf("http://%s/update", cfg.Server.FlagRunAddr)
 	start := time.Now()
+	url := fmt.Sprintf("http://%s/update", cfg.Server.FlagRunAddr)
 
-	logger.Log.Infow("request",
+	logger.Infow("request",
 		"URL", url,
 		"Метод", "POST",
 		"Время выполнения запроса", time.Since(start),
@@ -139,9 +145,10 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent) error {
 		return fmt.Errorf("запрос выполнен с кодом %d", resp.StatusCode)
 	}
 
-	logger.Log.Infow("response",
+	logger.Infow("response",
 		"Статус", resp.StatusCode,
 		"Размер", len(body),
+		"Вермя выполнения", time.Since(start),
 	)
 	return nil
 }
