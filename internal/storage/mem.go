@@ -42,8 +42,8 @@ func (m *MemStorage) GetGauge(name string) (float64, bool) {
 }
 
 func (m *MemStorage) GetCounter(name string) (int64, bool) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	v, ok := m.counter[name]
 	return v, ok
 }
@@ -71,6 +71,8 @@ func (m *MemStorage) GetAllGauges() map[string]float64 {
 }
 
 func (m *MemStorage) GetAllCounters() map[string]int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	result := make(map[string]int64, len(m.counter))
 	for k, v := range m.counter {
 		result[k] = v
@@ -79,8 +81,8 @@ func (m *MemStorage) GetAllCounters() map[string]int64 {
 }
 
 func (m *MemStorage) GetAllMetrics() []models.Metrics {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	var result []models.Metrics
 	for name, value := range m.gauge {
 		v := value
