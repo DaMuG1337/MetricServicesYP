@@ -7,8 +7,7 @@ import (
 	filesave "github.com/DaMuG1337/MetricServices/internal/file_save"
 	"github.com/DaMuG1337/MetricServices/internal/gzip"
 	"github.com/DaMuG1337/MetricServices/internal/handler"
-	"github.com/DaMuG1337/MetricServices/internal/logger"
-	mylog "github.com/DaMuG1337/MetricServices/internal/logger"
+	logpkg "github.com/DaMuG1337/MetricServices/internal/logger"
 	"github.com/DaMuG1337/MetricServices/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -16,7 +15,7 @@ import (
 
 func main() {
 	cfg := config.ServerFlags()
-	logger, err := logger.New()
+	logger, err := logpkg.New()
 	if err != nil {
 		logger.Error("Ошибка запуска логгера", err)
 	}
@@ -37,7 +36,7 @@ func run(cfg config.ConfigServer, storage handler.Storage, logger *zap.SugaredLo
 	app := handler.NewApp(storage, onUpdate)
 	r := chi.NewRouter()
 
-	r.Use(mylog.LogResponse(logger))
+	r.Use(logpkg.LogResponse(logger))
 	r.Use(gzip.GzipMiddleware)
 
 	r.Post("/update/{type}/{name}/{value}", app.PostMetrics)
