@@ -94,7 +94,10 @@ func rangeMetrics(m *Metrics, cfg config.ConfigAgent, logger *zap.SugaredLogger)
 			MType: models.Gauge,
 			Value: &v,
 		}, cfg, logger); err != nil {
-			logger.Error("запрос выполнен с кодом %")
+			logger.Errorw("ошибка отправки gauge",
+				"name", name,
+				"error", err,
+			)
 		}
 	}
 	for name, value := range m.counter {
@@ -104,7 +107,10 @@ func rangeMetrics(m *Metrics, cfg config.ConfigAgent, logger *zap.SugaredLogger)
 			MType: models.Counter,
 			Delta: &v,
 		}, cfg, logger); err != nil {
-			logger.Error("запрос выполнен с кодом %")
+			logger.Errorw("ошибка отправки counter",
+				"name", name,
+				"error", err,
+			)
 		}
 	}
 	m.counter["PollCount"] = 0 // обнуляю счетчик после отправки
