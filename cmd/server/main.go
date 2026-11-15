@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 
 	"github.com/DaMuG1337/MetricServices/internal/config"
@@ -14,16 +15,15 @@ import (
 )
 
 func main() {
-	cfg := config.ServerFlags()
 	logger, err := logpkg.New()
 	if err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
+	cfg := config.ServerFlags(logger)
 	storage, err := storage.NewMemStorage(cfg.Save.FilePath, cfg.Save.LoadFile)
 	if err != nil {
 		logger.Error("Ошибка конструктора метрик", err)
-	}
-	if cfg.Save.LoadFile {
+	} else if cfg.Save.LoadFile {
 		logger.Infow("Метрики загружены из файла", cfg.Save.FilePath)
 	}
 	if err := run(cfg, storage, logger); err != nil {

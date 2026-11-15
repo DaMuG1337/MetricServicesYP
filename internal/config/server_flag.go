@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/DaMuG1337/MetricServices/internal/logger"
+	"go.uber.org/zap"
 )
 
 type ConfigServer struct {
@@ -19,12 +19,8 @@ type SaveParam struct {
 	LoadFile bool
 }
 
-func ServerFlags() ConfigServer {
+func ServerFlags(logger *zap.SugaredLogger) ConfigServer {
 	var c ConfigServer
-	logger, err := logger.New()
-	if err != nil {
-		logger.Error("Ошибка запуска логгера", err)
-	}
 	c.FlagRunAddr = "localhost:8080"
 	c.Save.Interval = 300
 	c.Save.FilePath = "metrics.json"

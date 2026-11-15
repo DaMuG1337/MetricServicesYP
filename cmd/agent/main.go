@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"net/http"
 	"runtime"
@@ -31,7 +32,7 @@ func main() {
 
 	logger, err := logger.New()
 	if err != nil {
-		logger.Error("Ошибка запуска логгера", err)
+		log.Fatal("Ошибка запуска логгера", err)
 	}
 	cfg := config.AgentFlags(logger)
 
@@ -131,7 +132,6 @@ func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent, logger *zap.Sugar
 	logger.Infow("request",
 		"URL", url,
 		"Метод", "POST",
-		"Время выполнения запроса", time.Since(start),
 	)
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressed))
