@@ -21,7 +21,7 @@ func NewMemStorage(filePath string, restore bool) (*MemStorage, error) {
 	}
 	if restore && filePath != "" {
 		if err := m.LoadFromFile(filePath); err != nil {
-			return nil, err
+			return m, err
 		}
 	}
 

@@ -17,7 +17,7 @@ func main() {
 	cfg := config.ServerFlags()
 	logger, err := logpkg.New()
 	if err != nil {
-		logger.Error("Ошибка запуска логгера", err)
+		panic(err)
 	}
 	storage, err := storage.NewMemStorage(cfg.Save.FilePath, cfg.Save.LoadFile)
 	if err != nil {
