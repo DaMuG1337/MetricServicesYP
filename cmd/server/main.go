@@ -24,13 +24,11 @@ func main() {
 
 	cfg := config.ServerFlags(logger)
 
-	dbCfg := db.DBFlag(logger)
-
 	var database *sql.DB
-	if dbCfg.DSN != "" {
-		database, err = db.NewBD(dbCfg.DSN, logger)
+	if cfg.DSN != "" {
+		database, err = db.NewBD(cfg.DSN, logger)
 		if err != nil {
-			logger.Errorw("не удалось подключиться к БД", err)
+			logger.Errorw("не удалось подключиться к БД", "error", err)
 		} else {
 			defer database.Close()
 		}
@@ -38,13 +36,13 @@ func main() {
 
 	storage, err := storage.NewMemStorage(cfg.Save.FilePath, cfg.Save.LoadFile)
 	if err != nil {
-		logger.Error("Ошибка конструктора метрик", err)
+		logger.Errorw("Ошибка конструктора метрик", "error", err)
 	} else if cfg.Save.LoadFile {
-		logger.Infow("Метрики загружены из файла", cfg.Save.FilePath)
+		logger.Infow("Метрики загружены из файла", "path", cfg.Save.FilePath)
 	}
 
 	if err := run(cfg, storage, database, logger); err != nil {
-		logger.Error("Ошибка запуска сервера", err)
+		logger.Errorw("Ошибка запуска сервера", "error", err)
 	}
 }
 
