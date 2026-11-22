@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"log"
 	"math/rand/v2"
@@ -9,19 +11,30 @@ import (
 	"time"
 
 	"github.com/DaMuG1337/MetricServices/internal/config"
+	"github.com/DaMuG1337/MetricServices/internal/gzip/compress"
+	"github.com/DaMuG1337/MetricServices/internal/logger"
+	"github.com/DaMuG1337/MetricServices/internal/models"
+	"go.uber.org/zap"
 )
 
+// инициализирую метрику с 2 типами
 type Metrics struct {
 	gauge   map[string]float64
 	counter map[string]int64
 }
 
+// основная функция агента
 func main() {
 	m := Metrics{
 		gauge:   map[string]float64{},
 		counter: map[string]int64{},
 	}
-	cfg := config.AgentFlags()
+
+	logger, err := logger.New()
+	if err != nil {
+		log.Fatal("Ошибка запуска логгера", err)
+	}
+	cfg := config.AgentFlags(logger)
 
 	var met runtime.MemStats
 	pollInterval := cfg.Poll.FlagPollInterval
@@ -34,7 +47,7 @@ func main() {
 		pollCount++
 
 		if pollCount%(reportInterval/pollInterval) == 0 {
-			rangeMetrics(&m, cfg)
+			rangeMetrics(&m, cfg, logger)
 		}
 
 		time.Sleep(time.Duration(pollInterval) * time.Second)
@@ -74,30 +87,74 @@ func addMetric(met runtime.MemStats, m *Metrics) {
 	m.gauge["TotalAlloc"] = float64(met.TotalAlloc)
 }
 
-func rangeMetrics(m *Metrics, cfg config.ConfigAgent) {
+func rangeMetrics(m *Metrics, cfg config.ConfigAgent, logger *zap.SugaredLogger) {
 	for name, value := range m.gauge {
-		if err := makeURLRequest("gauge", name, value, cfg); err != nil {
-			log.Printf("Ошибка формирования запроса для %s: %v", name, err)
+		v := value
+		if err := makeJSONRequest(models.Metrics{
+			ID:    name,
+			MType: models.Gauge,
+			Value: &v,
+		}, cfg, logger); err != nil {
+			logger.Errorw("ошибка отправки gauge",
+				"name", name,
+				"error", err,
+			)
 		}
 	}
 	for name, value := range m.counter {
-		if err := makeURLRequest("counter", name, value, cfg); err != nil {
-			log.Printf("Ошибка формирования запроса для %s: %v", name, err)
+		v := value
+		if err := makeJSONRequest(models.Metrics{
+			ID:    name,
+			MType: models.Counter,
+			Delta: &v,
+		}, cfg, logger); err != nil {
+			logger.Errorw("ошибка отправки counter",
+				"name", name,
+				"error", err,
+			)
 		}
 	}
 	m.counter["PollCount"] = 0 // обнуляю счетчик после отправки
 }
 
-func makeURLRequest(typeMetric, name string, value interface{}, cfg config.ConfigAgent) error {
-	s := fmt.Sprintf("http://%s/update/%s/%s/%v", cfg.Server.FlagRunAddr, typeMetric, name, value)
-	response, err := http.Post(s, "text/plain", nil)
+func makeJSONRequest(m models.Metrics, cfg config.ConfigAgent, logger *zap.SugaredLogger) error {
+	body, err := json.Marshal(m)
 	if err != nil {
-		log.Println("Ошибка:", err)
 		return err
 	}
-	defer response.Body.Close()
-	if response.StatusCode != http.StatusOK {
-		log.Println("Сервер вернул:", response.Status)
+	compressed, err := compress.Compress(body)
+	if err != nil {
+		return err
 	}
+	start := time.Now()
+	url := fmt.Sprintf("http://%s/update", cfg.Server.FlagRunAddr)
+
+	logger.Infow("request",
+		"URL", url,
+		"Метод", "POST",
+	)
+
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(compressed))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Encoding", "gzip")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("запрос выполнен с кодом %d", resp.StatusCode)
+	}
+
+	logger.Infow("response",
+		"Статус", resp.StatusCode,
+		"Размер", len(body),
+		"Вермя выполнения", time.Since(start),
+	)
 	return nil
 }

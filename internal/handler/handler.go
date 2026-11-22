@@ -1,19 +1,96 @@
 package handler
 
 import (
+	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 
+	"github.com/DaMuG1337/MetricServices/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 
 type App struct {
-	storage Storage
+	storage  Storage
+	onUpdate func()
 }
 
-func NewApp(storage Storage) *App {
-	return &App{storage: storage}
+func NewApp(storage Storage, onUpdate func()) *App {
+	return &App{storage: storage, onUpdate: onUpdate}
+}
+
+func (a *App) PostMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	var req models.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if req.ID == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+
+	switch req.MType {
+	case models.Gauge:
+		if req.Value == nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		a.storage.SetGauge(req.ID, *req.Value)
+		if a.onUpdate != nil {
+			a.onUpdate()
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	case models.Counter:
+		if req.Delta == nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		a.storage.AddCounter(req.ID, *req.Delta)
+		if a.onUpdate != nil {
+			a.onUpdate()
+		}
+		w.WriteHeader(http.StatusOK)
+		return
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+	}
+}
+
+func (a *App) GetMetricsJSON(w http.ResponseWriter, r *http.Request) {
+	var req models.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	if req.MType == "" || req.ID == "" {
+		w.WriteHeader(http.StatusNotFound)
+		return
+	}
+	switch req.MType {
+	case models.Gauge:
+		val, ok := a.storage.GetGauge(req.ID)
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		req.Value = &val
+	case models.Counter:
+		val, ok := a.storage.GetCounter(req.ID)
+		if !ok {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		req.Delta = &val
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(req)
 }
 
 func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
@@ -33,6 +110,9 @@ func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.storage.SetGauge(nameMetric, val)
+		if a.onUpdate != nil {
+			a.onUpdate()
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	case "counter":
@@ -42,6 +122,9 @@ func (a *App) PostMetrics(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.storage.AddCounter(nameMetric, val)
+		if a.onUpdate != nil {
+			a.onUpdate()
+		}
 		w.WriteHeader(http.StatusOK)
 		return
 	default:
@@ -89,4 +172,18 @@ func (a *App) GetAllMetrics(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("<p>%s : %v</p>", name, value)))
 	}
 	w.Write([]byte("</body></html>"))
+}
+
+func (a *App) CheckDB(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if db == nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		if err := db.PingContext(r.Context()); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}
 }
