@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -171,4 +172,14 @@ func (a *App) GetAllMetrics(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(fmt.Sprintf("<p>%s : %v</p>", name, value)))
 	}
 	w.Write([]byte("</body></html>"))
+}
+
+func (a *App) CheckDB(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if err := db.PingContext(r.Context()); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}
 }

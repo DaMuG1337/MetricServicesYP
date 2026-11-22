@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/DaMuG1337/MetricServices/internal/handler"
 	"github.com/DaMuG1337/MetricServices/internal/storage"
 	"github.com/go-chi/chi/v5"
@@ -214,6 +215,53 @@ func TestApp_getJSONMetrics(t *testing.T) {
 			}
 			if tt.expectedBody != "" && strings.TrimSpace(w.Body.String()) != tt.expectedBody {
 				t.Errorf("body = %q, want %q", w.Body.String(), tt.expectedBody)
+			}
+		})
+	}
+}
+
+func TestApp_CheckDB(t *testing.T) {
+	// 1. Создаем мок базы
+	db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	if err != nil {
+		t.Fatalf("Ошибка создания sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// 2. Создаем App БЕЗ базы
+	app := handler.NewApp(nil, nil)
+
+	// 3. Получаем хендлер, передав ему мок-базу
+	handlerFunc := app.CheckDB(db)
+
+	tests := []struct {
+		name        string
+		mockPingErr error
+		wantCode    int
+	}{
+		{"База доступна", nil, http.StatusOK},
+		{"База недоступна", sqlmock.ErrCancelled, http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Настраиваем мок
+			if tt.mockPingErr != nil {
+				mock.ExpectPing().WillReturnError(tt.mockPingErr)
+			} else {
+				mock.ExpectPing().WillReturnError(nil)
+			}
+
+			// Делаем запрос
+			req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+			w := httptest.NewRecorder()
+
+			// Вызываем полученный хендлер
+			handlerFunc(w, req)
+
+			// Проверяем статус
+			if w.Code != tt.wantCode {
+				t.Errorf("код = %d, ожидался %d", w.Code, tt.wantCode)
 			}
 		})
 	}

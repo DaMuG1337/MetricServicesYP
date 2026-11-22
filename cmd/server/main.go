@@ -1,10 +1,12 @@
 package main
 
 import (
+	"database/sql"
 	"log"
 	"net/http"
 
 	"github.com/DaMuG1337/MetricServices/internal/config"
+	"github.com/DaMuG1337/MetricServices/internal/config/db"
 	filesave "github.com/DaMuG1337/MetricServices/internal/file_save"
 	"github.com/DaMuG1337/MetricServices/internal/gzip"
 	"github.com/DaMuG1337/MetricServices/internal/handler"
@@ -19,19 +21,33 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	cfg := config.ServerFlags(logger)
+
+	dbCfg := db.DBFlag(logger)
+	if dbCfg.DSN == "" {
+		logger.Fatal("Не задан DATABASE_DSN или флаг -d")
+	}
+
+	database, err := db.NewBD(dbCfg.DSN, logger)
+	if err != nil {
+		logger.Fatal("Не удалось подключиться к БД")
+	}
+	defer database.Close()
+
 	storage, err := storage.NewMemStorage(cfg.Save.FilePath, cfg.Save.LoadFile)
 	if err != nil {
 		logger.Error("Ошибка конструктора метрик", err)
 	} else if cfg.Save.LoadFile {
 		logger.Infow("Метрики загружены из файла", cfg.Save.FilePath)
 	}
-	if err := run(cfg, storage, logger); err != nil {
+
+	if err := run(cfg, storage, database, logger); err != nil {
 		logger.Error("Ошибка запуска сервера", err)
 	}
 }
 
-func run(cfg config.ConfigServer, storage handler.Storage, logger *zap.SugaredLogger) error {
+func run(cfg config.ConfigServer, storage handler.Storage, database *sql.DB, logger *zap.SugaredLogger) error {
 	onUpdate := filesave.SyncSaveFile(cfg.Save.FilePath, cfg.Save.Interval, storage, logger)
 	app := handler.NewApp(storage, onUpdate)
 	r := chi.NewRouter()
@@ -46,6 +62,7 @@ func run(cfg config.ConfigServer, storage handler.Storage, logger *zap.SugaredLo
 	r.Post("/value/", app.GetMetricsJSON)
 	r.Get("/value/{type}/{name}", app.GetMetrics)
 	r.Get("/", app.GetAllMetrics)
+	r.Get("/ping", app.CheckDB(database))
 
 	if cfg.Save.Interval > 0 {
 		go filesave.RunSaveMetrics(cfg.Save.FilePath, cfg.Save.Interval, storage, logger)
