@@ -176,6 +176,9 @@ func (a *App) GetAllMetrics(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) CheckDB(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if db == nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}
 		if err := db.PingContext(r.Context()); err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			return

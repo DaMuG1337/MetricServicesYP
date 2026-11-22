@@ -25,15 +25,16 @@ func main() {
 	cfg := config.ServerFlags(logger)
 
 	dbCfg := db.DBFlag(logger)
-	if dbCfg.DSN == "" {
-		logger.Fatal("Не задан DATABASE_DSN или флаг -d")
-	}
 
-	database, err := db.NewBD(dbCfg.DSN, logger)
-	if err != nil {
-		logger.Fatal("Не удалось подключиться к БД")
+	var database *sql.DB
+	if dbCfg.DSN != "" {
+		database, err = db.NewBD(dbCfg.DSN, logger)
+		if err != nil {
+			logger.Errorw("не удалось подключиться к БД", err)
+		} else {
+			defer database.Close()
+		}
 	}
-	defer database.Close()
 
 	storage, err := storage.NewMemStorage(cfg.Save.FilePath, cfg.Save.LoadFile)
 	if err != nil {

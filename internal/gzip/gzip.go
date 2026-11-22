@@ -51,6 +51,9 @@ func (c *compressWriter) Write(p []byte) (int, error) {
 }
 
 func (c *compressWriter) Close() error {
+	if !c.compress {
+		return nil
+	}
 	return c.zw.Close()
 }
 

@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 
+	//_ "github.com/jacjc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 )
 
