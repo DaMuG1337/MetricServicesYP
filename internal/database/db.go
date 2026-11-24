@@ -3,7 +3,7 @@ package db
 import (
 	"database/sql"
 
-	_ "github.com/jackc/pgx/v5/stdlib" // регистрирует драйвер "pgx"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.uber.org/zap"
 )
 
