@@ -3,8 +3,10 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/DaMuG1337/MetricServices/internal/handler"
 	"github.com/DaMuG1337/MetricServices/internal/storage"
 	"github.com/go-chi/chi/v5"
@@ -28,8 +30,11 @@ func TestApp_postMetrics(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := storage.NewMemStorage()
-			app := handler.NewApp(storage)
+			storage, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			app := handler.NewApp(storage, nil)
 
 			r := chi.NewRouter()
 			r.Post("/update/{type}/{name}/{value}", app.PostMetrics)
@@ -61,10 +66,13 @@ func TestApp_getMetrics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			storage := storage.NewMemStorage()
+			storage, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
 			storage.SetGauge("Alloc", 123)
 			storage.SetCounter("PollCount", 42)
-			app := handler.NewApp(storage)
+			app := handler.NewApp(storage, nil)
 
 			r := chi.NewRouter()
 			r.Get("/value/{type}/{name}", app.GetMetrics)
@@ -80,6 +88,180 @@ func TestApp_getMetrics(t *testing.T) {
 			if w.Body.String() != tt.wantValue {
 				t.Errorf("Ожидалось тело %q, получено %q", tt.wantValue, w.Body.String())
 				return
+			}
+		})
+	}
+}
+
+func TestApp_postJSONMetrics(t *testing.T) {
+	tests := []struct {
+		name         string
+		method       string
+		body         string
+		expectedCode int
+	}{
+		{"Первая проверка", http.MethodPost, `{"id": "Alloc", "type": "gauge", "value": 123}`, http.StatusOK},
+		{"valid counter", http.MethodPost, `{"id":"PollCount","type":"counter","delta":5}`, http.StatusOK},
+		{"invalid json", http.MethodPost, `{invalid`, http.StatusBadRequest},
+		{"empty id", http.MethodPost, `{"id":"","type":"gauge","value":123}`, http.StatusNotFound},
+		{"nil value", http.MethodPost, `{"id":"Alloc","type":"gauge"}`, http.StatusBadRequest},
+		{"nil delta", http.MethodPost, `{"id":"PollCount","type":"counter"}`, http.StatusBadRequest},
+		{"unknown type", http.MethodPost, `{"id":"Alloc","type":"unknown","value":123}`, http.StatusBadRequest},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storage, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			app := handler.NewApp(storage, nil)
+			r := chi.NewRouter()
+			r.Post("/update", app.PostMetricsJSON)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, "/update", strings.NewReader(tt.body))
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedCode {
+				t.Errorf("code = %d, want %d", w.Code, tt.expectedCode)
+			}
+		})
+	}
+}
+
+func TestApp_getJSONMetrics(t *testing.T) {
+	tests := []struct {
+		name         string
+		method       string
+		body         string
+		setup        func(s handler.Storage)
+		expectedCode int
+		expectedBody string
+	}{
+		{
+			name:   "valid gauge",
+			method: http.MethodPost,
+			body:   `{"id":"Alloc","type":"gauge"}`,
+			setup: func(s handler.Storage) {
+				s.SetGauge("Alloc", 123.45)
+			},
+			expectedCode: http.StatusOK,
+			expectedBody: `{"id":"Alloc","type":"gauge","value":123.45}`,
+		},
+		{
+			name:   "valid counter",
+			method: http.MethodPost,
+			body:   `{"id":"PollCount","type":"counter"}`,
+			setup: func(s handler.Storage) {
+				s.AddCounter("PollCount", 5)
+			},
+			expectedCode: http.StatusOK,
+			expectedBody: `{"id":"PollCount","type":"counter","delta":5}`,
+		},
+		{
+			name:         "metric not found",
+			method:       http.MethodPost,
+			body:         `{"id":"Unknown","type":"gauge"}`,
+			setup:        func(s handler.Storage) {},
+			expectedCode: http.StatusNotFound,
+			expectedBody: "",
+		},
+		{
+			name:         "invalid json",
+			method:       http.MethodPost,
+			body:         `{invalid`,
+			setup:        func(s handler.Storage) {},
+			expectedCode: http.StatusBadRequest,
+			expectedBody: "",
+		},
+		{
+			name:         "empty id",
+			method:       http.MethodPost,
+			body:         `{"id":"","type":"gauge"}`,
+			setup:        func(s handler.Storage) {},
+			expectedCode: http.StatusNotFound,
+			expectedBody: "",
+		},
+		{
+			name:         "unknown type",
+			method:       http.MethodPost,
+			body:         `{"id":"Alloc","type":"unknown"}`,
+			setup:        func(s handler.Storage) {},
+			expectedCode: http.StatusBadRequest,
+			expectedBody: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storage, err := storage.NewMemStorage("", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tt.setup(storage)
+
+			app := handler.NewApp(storage, nil)
+
+			r := chi.NewRouter()
+			r.Post("/value", app.GetMetricsJSON)
+
+			w := httptest.NewRecorder()
+			req := httptest.NewRequest(tt.method, "/value", strings.NewReader(tt.body))
+			r.ServeHTTP(w, req)
+
+			if w.Code != tt.expectedCode {
+				t.Errorf("code = %d, want %d", w.Code, tt.expectedCode)
+			}
+			if tt.expectedBody != "" && strings.TrimSpace(w.Body.String()) != tt.expectedBody {
+				t.Errorf("body = %q, want %q", w.Body.String(), tt.expectedBody)
+			}
+		})
+	}
+}
+
+func TestApp_CheckDB(t *testing.T) {
+	// 1. Создаем мок базы
+	db, mock, err := sqlmock.New(sqlmock.MonitorPingsOption(true))
+	if err != nil {
+		t.Fatalf("Ошибка создания sqlmock: %v", err)
+	}
+	defer db.Close()
+
+	// 2. Создаем App БЕЗ базы
+	app := handler.NewApp(nil, nil)
+
+	// 3. Получаем хендлер, передав ему мок-базу
+	handlerFunc := app.CheckDB(db)
+
+	tests := []struct {
+		name        string
+		mockPingErr error
+		wantCode    int
+	}{
+		{"База доступна", nil, http.StatusOK},
+		{"База недоступна", sqlmock.ErrCancelled, http.StatusInternalServerError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Настраиваем мок
+			if tt.mockPingErr != nil {
+				mock.ExpectPing().WillReturnError(tt.mockPingErr)
+			} else {
+				mock.ExpectPing().WillReturnError(nil)
+			}
+
+			// Делаем запрос
+			req := httptest.NewRequest(http.MethodGet, "/ping", nil)
+			w := httptest.NewRecorder()
+
+			// Вызываем полученный хендлер
+			handlerFunc(w, req)
+
+			// Проверяем статус
+			if w.Code != tt.wantCode {
+				t.Errorf("код = %d, ожидался %d", w.Code, tt.wantCode)
 			}
 		})
 	}
